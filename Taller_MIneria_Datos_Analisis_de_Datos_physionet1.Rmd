@@ -19,6 +19,7 @@ library("tidyverse")
 
 # Introducción: Physionet 2012 UCI data mortality
 
+What's up folks? HELOOOOOOOOOOOOOOOO
 
 En el concurso del congreso ["Computers in  Cardiology" (ahora "Computing in Cardiology") del año 2012](https://physionet.org/content/challenge-2012/) propuso un  caso de estudio como reto: *Predicción de la tasa de mortalidad de los pacientes de una UCI*
 
