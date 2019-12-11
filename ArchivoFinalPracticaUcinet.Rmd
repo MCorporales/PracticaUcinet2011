@@ -1,13 +1,150 @@
 ---
-title: "Practica Final Análisis de Datos"
-author: "Castillo, Cirer, Corporales"
-date: "10/12/2019"
-output: html_document
+title: "Práctica final Análisis de Datos: Ucinet"
+author: "Castillo Millán, Sofía; Cirer Pastrana, Víctor Javier; Corporales Tur, Marta"
+time:  "`Sys.Date()`"
+output: 
+  html_document: 
+    keep_md: yes
+    number_sections: yes
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
-# Lo primeor que hacemos es cargar las librerías necesarias
+# Cargamos librerías
 library("tidyverse")
+```
+
+# Introducción
+
+# Resumen
+
+# Limpieza de datos
+
+```{r path}
+path = "data_basic_physionet/set-a/"# path training
+
+lista_pacientes_set_a = dir(path) # lista  ficheros pacientes 
+
+# length(lista_pacientes_set_a) # número pacientes en training
+```
+
+
+```{r cargarSetA}
+# Lista path's a cada fichero de paciente
+list_files = paste0(path, lista_pacientes_set_a)
+
+# Función leer paciente
+leer_paciente = function(file){
+  read_csv(file, col_types = cols(Time = col_character(),
+                                 Parameter = col_character(),
+                                 Value = col_double())) %>%
+    separate(Time, into = c("H","M"), sep = ":") %>% 
+    mutate(Time_Minutes = as.numeric(H)*60 + as.numeric(M)) %>% 
+    select(Time_Minutes, Parameter, Value)
+}
+
+# Leer_paciente(list_files[1])
+raw_data = lapply(list_files,leer_paciente) # Lista de los datos por paciente
+
+# Extraer perfiles "RecordID", "Age", "Gender", "Height", "Weight", "ICUType" 
+perfil = function(data_paciente){
+  data_paciente %>% 
+    filter(Parameter %in% c("RecordID", "Age", "Gender", "Height", "ICUType", "Weight")) %>%
+    select(-Time_Minutes) %>% distinct(Parameter, .keep_all = TRUE) %>% 
+    spread(Parameter, Value)
+}
+
+# Guardamos los datos de perfil de cada paciente
+perfiles = lapply(raw_data, perfil)%>%
+  bind_rows() %>%
+  select(RecordID, Age, Gender, Height, Weight, ICUType)
+
+## Leer series
+## Se modifica error de time
+serie_UCI_parameter <- function(paciente,parameters){
+  paciente %>%
+    arrange(Parameter, Time_Minutes) %>%
+    filter(Parameter %in% parameters) %>%
+    add_column(RecordID = paciente[1,3]$Value) 
+} 
+```
+
+
+ME HA DICHO IRENE QUE ANTES DE HACER ESTO TENEMOS QUE HACER LAS COMPARACIONES DE LAS VARIABLES, NO DESPUÉS COMO HABÍAMOS HECHO NOSOTRAS.Y LE HE DICHO QUE ENTONCES EL BOXPLOT NO FUNCIONA PORQUE LOS DATOS NO ESTAN LIMPIOS DEL TODO Y ME HA DICHO DE HACER EN VEZ DE BOXPLOTS SERIES DE TIEMPO PARA COMPARAR.
+
+
+
+```{r}
+# Paso parámetros y apilo 
+parameters = c("HR", "RespRate", "GCS")
+series_parameters = lapply(raw_data, FUN = function(x) serie_UCI_parameter(x,parameters)) %>%
+  bind_rows()
+```
+
+
+En resumen hasta ahora tenemos lo siguiente
+
+```{r glimpse}
+#set-a
+glimpse(perfiles)
+glimpse(series_parameters)
+```
+
+
+## Unificar: series, perfiles y scores
+
+Nos faltan los scores clásicos que se utilizan eb las ICU. Estos ewstán el fichero Outcome-a.txt para el set-a
+
+
+```{r}
+scoresApath = "data_basic_physionet/Outcomes-a.txt"
+scoresA = read_csv(scoresApath)
+glimpse(scoresA)
+Scores_perfilesA = inner_join(perfiles, scoresA, "RecordID")
+glimpse(Scores_perfilesA)
+```
+
+
+### Extracción factores de las series 
+
+Genero una tabla con resumenes de  las variables por paciente: media, desviación típica 
+
+```{r}
+series_summary = series_parameters %>%
+  group_by(RecordID, Parameter) %>%
+  summarise(count = n(), mean = mean(Value, na.rm = TRUE), sd = sd(Value, na.rm = TRUE))%>%
+  gather(Stat, Value, count:sd) %>%
+  ungroup() %>%
+  transmute(RecordID, ParameterStat = paste0(Parameter, "_" ,Stat), Value) %>%
+  spread(ParameterStat, Value)
+```
+
+
+```{r}
+data_tidy=Scores_perfilesA %>%
+  inner_join(series_summary)
+
+head(data_tidy)
+```
+
+
+
+```
+NOS QUEDAMOS CON LAS 10 VARIABLES: 
+1. podemos juntar height y weight en IMC (indice de masa corporal)
+2. Age
+3. Gender
+4. Record ID
+5. ICU-Type
+6. In-hospital-death
+
+```
+
+
+Vamos a hacer un boxplot de todas las maneras de medir la presión arterial para ver cuál nos conviene más coger para nuestro estudio.
+
+```{r}
+# DiasABP, MAP, NIDiasABP, NIMAP, NISysABP, SysABP
 ```
