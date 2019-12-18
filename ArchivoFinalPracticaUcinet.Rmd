@@ -72,13 +72,11 @@ serie_UCI_parameter <- function(paciente,parameters){
 ```
 
 
-ME HA DICHO IRENE QUE ANTES DE HACER ESTO TENEMOS QUE HACER LAS COMPARACIONES DE LAS VARIABLES, NO DESPUÉS COMO HABÍAMOS HECHO NOSOTRAS.Y LE HE DICHO QUE ENTONCES EL BOXPLOT NO FUNCIONA PORQUE LOS DATOS NO ESTAN LIMPIOS DEL TODO Y ME HA DICHO DE HACER EN VEZ DE BOXPLOTS SERIES DE TIEMPO PARA COMPARAR.
-
 
 
 ```{r}
 # Paso parámetros y apilo 
-parameters = c("HR", "RespRate", "GCS")
+parameters = c("Albumin", "ALP", "ALT", "AST", "Bilirubin", "BUN", "Cholesterol", "Creatinine", "DiasABP", "FiO2", "GCS", "Glucose", "HCO3", "HCT", "HR", "K", "Lactate", "Mg", "MAP", "MechVent", "Na", "NIDiasABP", "NIMAP", "NISysABP", "PaCO2", "PaO2", "pH", "Platelets", "RespRate", "SaO2", "SysABP", "Temp", "TropI", "TropT", "Urine", "WBC")
 series_parameters = lapply(raw_data, FUN = function(x) serie_UCI_parameter(x,parameters)) %>%
   bind_rows()
 ```
@@ -130,21 +128,78 @@ head(data_tidy)
 ```
 
 
+Para elegir las variables hemos dibujado todos los boxplots para saber cuáles eran más significativas. Nos hemos quedado con las más significativas y en caso de duda entre dos hemos cogido la que no estaba en ninguno de los índices SOFA o SAPS.
 
+```{r, echo = FALSE}
+
+data_tidy$`In-hospital_death` = factor(data_tidy$`In-hospital_death`, labels = c("0","1"))
+
+data_tidy %>%
+  filter(!is.na(GCS_mean)) %>% 
+  filter(!is.na(`In-hospital_death`)) %>%
+  ggplot(data = data_tidy, mapping = aes(x = `In-hospital_death`, y = GCS_mean)) +
+  geom_boxplot() + 
+  ylim(6,7)
+t.test(`In-hospital_death`)
 ```
-NOS QUEDAMOS CON LAS 10 VARIABLES: 
-1. podemos juntar height y weight en IMC (indice de masa corporal)
-2. Age
-3. Gender
-4. Record ID
-5. ICU-Type
-6. In-hospital-death
 
+
+Nos quedamos con las siguientes 10 variables: 
+ 
+1. GCS 
+2. WBC  (NO - medias iguales)
+3. RespRate (NO - medias iguales)
+4. Albumin 
+5. BUN (NO - medias iguales)
+6. Cholesterol (NO - medis iguales)
+7. PaO2
+8. Glucose (NO - medias iguales)
+9. HCO3 (SAPS)
+10. Lactate (NO - medias iguales)
+
+Una vez tenemos estas vamos a aplicar un t.test para saber si es significativa o no. Para ello necesitamos primero hacer un var.test, donde descubrimos si la variables son iguales o no para poderlo tener en cuenta en el t.test. 
+
+(Var.test - H0 varianzas iguales; H1 alternativa: varianzas distintas -> p-value < 0.05 rechazamos H0)
+(t.test - H0 medias igaules; H1 distitnas -> akjsfhlakjsdfhlkaj)
+```
+x=data_tidy$GCS_mean[data_tidy$`In-hospital_death`==0]
+> y=data_tidy$GCS_mean[data_tidy$`In-hospital_death`==1]
+> var.test(x,y)
+
+	F test to compare two variances
+
+data:  x and y
+F = 0.61916, num df = 3386, denom df = 548, p-value = 5.949e-15
+alternative hypothesis: true ratio of variances is not equal to 1
+95 percent confidence interval:
+ 0.5432952 0.7014304
+sample estimates:
+ratio of variances 
+         0.6191629 
+
+> t.test(x,y,var.equal = FALSE,alternative="greater")
+
+	Welch Two Sample t-test
+
+data:  x and y
+t = 13.96, df = 662.43, p-value < 2.2e-16
+alternative hypothesis: true difference in means is greater than 0
+95 percent confidence interval:
+ 2.116574      Inf
+sample estimates:
+mean of x mean of y 
+11.938966  9.539243 
 ```
 
 
-Vamos a hacer un boxplot de todas las maneras de medir la presión arterial para ver cuál nos conviene más coger para nuestro estudio.
+Por tanto, nos quedamos con las siguientes 4: (solo 4 porque dice irene que como las otras no son significativas le vamos a meter basura en el informe)
+1. GCS
+2. Albumin
+3. PaO2
+4. HCO3 
+
 
 ```{r}
-# DiasABP, MAP, NIDiasABP, NIMAP, NISysABP, SysABP
+data_final <- data_tidy %>%
+  select(RecordID, Age, Gender, Weight, ICUType, `SAPS-I`, SOFA, Length_of_stay, Survival, `In-hospital_death`, GCS_mean, Albumin_mean, PaO2_mean, HCO3_mean)
 ```
