@@ -128,7 +128,7 @@ head(data_tidy)
 ```
 
 
-Para elegir las variables hemos dibujado todos los boxplots para saber cuáles eran más significativas. Nos hemos quedado con las más significativas y en caso de duda entre dos hemos cogido la que no estaba en ninguno de los índices SOFA o SAPS.
+Para elegir las variables hemos dibujado todos los boxplots para saber cuáles eran más significativas teniendo en cuenta la variable `In-hospital_death`. Nos hemos quedado con las más significativas y en caso de duda entre dos hemos cogido la que no estaba en ninguno de los índices SOFA o SAPS. Como ejemplo, mostramos el boxplot del índice `GCS`.
 
 ```{r, echo = FALSE}
 
@@ -157,42 +157,26 @@ Nos quedamos con las siguientes 10 variables:
 9. HCO3 (SAPS)
 10. Lactate (NO - medias iguales)
 
-Una vez tenemos estas vamos a aplicar un t.test para saber si es significativa o no. Para ello necesitamos primero hacer un var.test, donde descubrimos si la variables son iguales o no para poderlo tener en cuenta en el t.test. 
+Una vez tenemos estas vamos a aplicar un `t.test` para saber si es significativa o no. Para ello necesitamos primero hacer un `var.test`, donde descubrimos si las varianzas son iguales o no para poderlo tener en cuenta en el `t.test`. Vamos a mostrar como hemos hecho una de las variables, el índice `GCS` del cual ya hemos visto el boxplot. Recordemos que si `In-hospital_death` es 0 el paciente vive y si es 1, muere en hospital.
 
-(Var.test - H0 varianzas iguales; H1 alternativa: varianzas distintas -> p-value < 0.05 rechazamos H0)
-(t.test - H0 medias igaules; H1 distitnas -> akjsfhlakjsdfhlkaj)
-```
-x=data_tidy$GCS_mean[data_tidy$`In-hospital_death`==0]
-> y=data_tidy$GCS_mean[data_tidy$`In-hospital_death`==1]
-> var.test(x,y)
-
-	F test to compare two variances
-
-data:  x and y
-F = 0.61916, num df = 3386, denom df = 548, p-value = 5.949e-15
-alternative hypothesis: true ratio of variances is not equal to 1
-95 percent confidence interval:
- 0.5432952 0.7014304
-sample estimates:
-ratio of variances 
-         0.6191629 
-
-> t.test(x,y,var.equal = FALSE,alternative="greater")
-
-	Welch Two Sample t-test
-
-data:  x and y
-t = 13.96, df = 662.43, p-value < 2.2e-16
-alternative hypothesis: true difference in means is greater than 0
-95 percent confidence interval:
- 2.116574      Inf
-sample estimates:
-mean of x mean of y 
-11.938966  9.539243 
+Asignamos al valor `x` los valores de la variable a estudiar de los que sobreviven y al `y` los de los que mueren en el hospital, y aplicamos el `var.test` de las dos teniendo en cuenta que nuestra hipótesis nula HO es que las varianzas sean iguales y la hipótesis alternativa H1 es que sean distintas.
+```{r}
+x = data_tidy$GCS_mean[data_tidy$`In-hospital_death` == 0]
+y = data_tidy$GCS_mean[data_tidy$`In-hospital_death` == 1]
+var.test(x,y)
 ```
 
+Una vez aplicaco el test de las varianzas nos fijamos en el valor del `p-valor`. Si este es menor que 0.05, rechazamos la hipótesis nula, por lo que podemos aplicar un `t.test` para varianzas distintas con H0 medias iguales y H1 medias distintas.
+```{r}
+t.test(x, y, var.equal = FALSE, alternative = "greater")
+```
 
-Por tanto, nos quedamos con las siguientes 4: (solo 4 porque dice irene que como las otras no son significativas le vamos a meter basura en el informe)
+Como el `p-valor` es menor que 0.05, rechazamos la hipótesis nula, por lo que obtenemos que las medias son distintas. Como las medias son distintas para muerto o vivo, consideramos que la variable es significativa para el estudio y la seleccionamos. 
+
+De las 10 variables previamente seleccionadas, las que nos hayan salido que tienen media distinta para supervivientes o muertos en la UCI son las que consideraremos para nuestro estudio final.
+
+
+Por tanto, nos quedamos con las siguientes 4: (nos quedamos 4 en vez de 5, pues las otras nos han salido no significativas y así no estropeamos los datos que nos pueden dar más información)
 1. GCS
 2. Albumin
 3. PaO2
@@ -203,3 +187,80 @@ Por tanto, nos quedamos con las siguientes 4: (solo 4 porque dice irene que como
 data_final <- data_tidy %>%
   select(RecordID, Age, Gender, Weight, ICUType, `SAPS-I`, SOFA, Length_of_stay, Survival, `In-hospital_death`, GCS_mean, Albumin_mean, PaO2_mean, HCO3_mean)
 ```
+
+
+# Análisi Multivariado
+
+Comparación de variables dos a dos
+```{r}
+library("GGally")
+library("PerformanceAnalytics")
+library("ggcorrplot")
+library("aplpack")
+
+nums = c(2:9,11:14) # quitamos el 1 que es el numero que indica el paciente y el 10 ('in-hospital_death') porque la hemos hecho no numérica para que fuera factor 0 o 1 para indicar "muerto" o no "muerto" y para las correlaciones da error
+ggpairs(data_final[,nums])
+chart.Correlation(data_final[nums], histogram=TRUE, pch=19)
+
+```
+
+
+Matriz de covarianza
+```{r}
+cov(data_final[, nums])
+```
+
+Matriz de correlación
+```{r}
+cor(data_final[, nums])
+```
+
+
+
+Cálculo de componentes
+```{r}
+library("factoextra")
+
+data_final.acp = prcomp(!is.na(data_final[, nums]), scale = TRUE) #he probado varias maneras pero no me va, he puesto lo del !is.na() porque si no me dice que hay valores inexistentes y no calcula pero así el error que me da no lo entiendo
+```
+
+A partir del análisis de componentes principales pintamos los siguientes gráficos para ver mejor la relación de las variables. (NO SE PINTAN PORQUE LO OTRO NO SE HA CALCULADO)
+
+```{r}
+fviz_pca_ind(data_final.acp,
+             col.ind = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE # Para evitar que el texto se solape
+             )
+```
+
+```{r}
+fviz_pca_var(data_final.acp,
+             col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE
+             )
+``` 
+
+
+
+Comprobación del ACP: (TAMPOCO SE PINTA POR LO MISMO)
+```{r}
+library("ggfortify")
+autoplot(data_final.acp,
+         data = data_final,
+         colour = 'ICUType',
+         loadings = TRUE,
+         loadings.colour = 'blue',
+         loadings.label = TRUE,
+         loadings.label.size = 3
+         )
+```
+
+
+
+
+
+
+
+
