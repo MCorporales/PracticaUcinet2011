@@ -140,7 +140,6 @@ data_tidy %>%
   ggplot(data = data_tidy, mapping = aes(x = `In-hospital_death`, y = GCS_mean)) +
   geom_boxplot() + 
   ylim(6,7)
-t.test(`In-hospital_death`)
 ```
 
 
