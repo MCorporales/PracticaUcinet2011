@@ -246,6 +246,8 @@ fviz_pca_var(data_final.acp,
 Comprobación del ACP: (TAMPOCO SE PINTA POR LO MISMO)
 ```{r}
 library("ggfortify")
+
+#este como también necesita el data_final.acp que era el que no quería calcular 3 chunks más arriba pues tampoco funciona, pero en principio arreglando ese, tenemos estos tres útlimos arreglados de rebote
 autoplot(data_final.acp,
          data = data_final,
          colour = 'ICUType',
