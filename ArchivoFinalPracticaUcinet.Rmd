@@ -190,64 +190,115 @@ data_final <- data_tidy %>%
 
 # Análisi Multivariado
 
-Comparación de variables dos a dos
-```{r}
+Para realizar el análisis multivariado comenzaremos realizando un análisis de componentes principales para poder después continuar con un clustering adecuado a las componentes que veamos más representativas. Finalmente, acabaremos con un análisis discriminante para trabajar con variables cualitativas.
+
+## Análisis de componentes principales
+
+Comenzamos con una visualización de los datos, donde se comparan dos a dos cada una de las diferentes variables que hemos escogido para realizar este estudio.
+
+```{r, echo=FALSE}
+library("tidyverse")
+library("FactoMineR")
+library("factoextra")
+library("relaimpo")
+# Para utilizar ggpairs
 library("GGally")
-library("PerformanceAnalytics")
-library("ggcorrplot")
-library("aplpack")
+
+# Para utilizar multiplot
+library("Rmisc")
+
+# Para instalar ggbiplot (NO NECESARIO): instalar y cargar el paquete devtools, y ejecutar el comando
+# install_github("vqv/ggbiplot")
+# library("ggbiplot")
+
+# Para utilizar ggpar
+library("ggpubr")
 
 nums = c(2:9,11:14) # quitamos el 1 que es el numero que indica el paciente y el 10 ('in-hospital_death') porque la hemos hecho no numérica para que fuera factor 0 o 1 para indicar "muerto" o no "muerto" y para las correlaciones da error
-ggpairs(data_final[,nums])
-chart.Correlation(data_final[nums], histogram=TRUE, pch=19)
+ggpairs(data_final[,nums],
+        diag=list(
+          continuous = wrap("barDiag",binwidth = 10, 
+                            color = "black", fill= "blue")
+        ),
+        lower = list(
+          continuous = wrap("points", size = 0.5, color = "black")
+        ),
+        
+        title = "Correlaciones y distribución de las variables")->gg
+
+gg
 
 ```
+Como es muy complicado y laborioso tener en cuenta y determinar la relación que hay entre todas estas variables, vamos a describir sus
+componentes principales, de manera que con un número menor de ellas podamos seguir trabajando sobre los datos perdiendo la menor información posible.
 
+Comencemos calculando la matriz de covarianza. Teniendo en cuenta que algunas observaciones no tienen todas las variables completas (existen NA), procederemos a eliminar la variable obtenida en esa observación. Así obtenemos:
 
-Matriz de covarianza
 ```{r}
-cov(data_final[, nums])
+covarianza <- cov(data_final[, nums], use = "na.or.complete")
+covarianza
 ```
 
-Matriz de correlación
+Observamos que la matriz es complicada de entender a simple vista, por ello utilizamos la función PCA, que nos devuelve los valores y vectores propios de esta matriz, dándonos información sobre el número de dimensiones que deberá tener nuestro análisis, es decir, el número de componentes principales.
+
 ```{r}
-cor(data_final[, nums])
+dataPCA <- PCA(data_final[, nums], graph = FALSE)
+eig.val<-get_eigenvalue(dataPCA)
+eig.val
 ```
 
+Que podemos visualizar en el siguiente screeplot:
 
 
-Cálculo de componentes
+Realizamos ahora el 
 ```{r}
-library("factoextra")
-
-data_final.acp = prcomp(!is.na(data_final[, nums]), scale = TRUE) #he probado varias maneras pero no me va, he puesto lo del !is.na() porque si no me dice que hay valores inexistentes y no calcula pero así el error que me da no lo entiendo
+fviz_screeplot(dataPCA, addlabels = TRUE) -> screeplot
+ggpar(screeplot, title = "Porcentaje de la varianza explicado por cada nueva variable",
+xlab = "Dimensión",
+ylab = "Porcentaje de varianza explicado")
 ```
 
-A partir del análisis de componentes principales pintamos los siguientes gráficos para ver mejor la relación de las variables. (NO SE PINTAN PORQUE LO OTRO NO SE HA CALCULADO)
+Observamos que el análisis de componentes principales en este caso es bastante complicado ya que cada variable explica una parte importante de la observación. Aún así, podemos explicar una parte importante utilizando 2 variables en vez de 12 (un 32%). Se podrían haber utilizado más componentes, pero entonces no serviría de nada realizar este análisis ya que aumentaría mucho el contenido a estudiar y no sería significativo.
+
+Veamos que variables representan cada componente:
 
 ```{r}
-fviz_pca_ind(data_final.acp,
-             col.ind = "cos2",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE # Para evitar que el texto se solape
-             )
+fviz_contrib(dataPCA, choice = "var", axes = 1) %>%
+ggpar(title = "Contribución a Dim-1", ylab = "Contribución (%)") -> contrib1
+fviz_contrib(dataPCA, choice = "var", axes = 2) %>%
+ggpar(title = "A Dim-2", ylab = "Contribución (%)") -> contrib2
+multiplot(contrib1, contrib2, cols = 2) 
 ```
 
+Observamos que para cada dimensión tenemos las variables:
+
+1ª Dimensión: SOFA, SAPS y GCS_mean.
+2ª Dimensión: Age y ICUType.
+
+Ahora nos disponemos a analizar las dos componentes para compararlos mediante un biplot.
+
 ```{r}
-fviz_pca_var(data_final.acp,
-             col.var = "contrib",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE
-             )
+as_tibble(dataPCA$ind$coord, rownames = NA) %>% rownames_to_column() %>%
+filter(Dim.1 > 3 | Dim.2 < -2.5) -> addToBiplot12 #Etiquetamos a los outliers
+#Representamos un biplot de las componentes 1 y 2
+fviz_pca_biplot(dataPCA,axes=c(1,2), repel = TRUE,geom = "point",
+addEllipses = TRUE,col.var = 'darkred', invisible = "quanti.sup") %>%
+ggpar(xlim=c(-4,7),ylim=c(-5,4),title = "Biplot - Dim 1 y Dim 2",
+xlab = "Dim 1 (20%)",ylab = "Dim 2 (11%)") +
+geom_text(data = addToBiplot12, mapping = aes(x = Dim.1, y = Dim.2, label = rowname))
 ``` 
 
+Hemos podido ver que debido a la poca cantidad de información que representan las componentes principales, ya que no existen variables dominantes frente a las demás (las variables dan prácticamente la misma información), no hemos podido realizar un ACP satisfactorio.
 
+Observamos que en este caso no podemos llegar a una conclusión ya que los puntos están prácticamente uniformemente distribuidos dentro del biplot. Podemos ver cierta tendencia hacia la derecha del biplot que puede ayudar a entender que la tasa de muerte de una persona está mínimamente representada por la dimensión 1, mientras que la dimensión 2 no dice nada.
 
-Comprobación del ACP: (TAMPOCO SE PINTA POR LO MISMO)
+De forma acertada han aparecido las variables SOFA y SAPS-I en la primera componente principal ya que, como ya sabemos, suponen un buen coeficiente determinante de la condición del paciente ya que engloba todas las demás variables.
+
+```
+Comprobación del ACP: 
 ```{r}
 library("ggfortify")
 
-#este como también necesita el data_final.acp que era el que no quería calcular 3 chunks más arriba pues tampoco funciona, pero en principio arreglando ese, tenemos estos tres útlimos arreglados de rebote
 autoplot(data_final.acp,
          data = data_final,
          colour = 'ICUType',
@@ -257,10 +308,56 @@ autoplot(data_final.acp,
          loadings.label.size = 3
          )
 ```
+```
+
+## Escalamiento multidimensional
+
+Continuaremos con el escalamiento multidimensional. Comenzaremos calculando la matriz de distancias utilizando la distancia de Gower. Esta matriz es muy grande (más de 15 millones de entradas), por tanto omitiremos enseñarla. Después, mediante la función fit, haremos un ACP de dos componentes (igual que el realizado en el apartado anterior), para poder agrupar las variables y analizarlas más fácilmente. 
+
+````{r}
+library("cluster")
+dist=as.matrix(daisy(data_final[, nums], metric="gower"))
+fit <- cmdscale(dist,eig=TRUE, k=2)
+```
+Los metemos en una tibble con etiqueta dependiendo de la UCI.
+```{r}
+datos <- tibble(uci = as.factor(data_final[, nums]$ICUType), ihd=data_final[['In-hospital_death']], comp1 = fit$points[,1], comp2 = fit$points[,2])
+
+```
+A continuación dibujamos las muestras de pacientes coloreándolas en función del tipo de UCI:
+```{r}
+datos %>% ggplot(aes(x=comp1, y=comp2)) +
+  geom_point(aes(color=uci))
+```
+Podemos ver que la componente 2 parece influir en el tipo de UCI. Una componente 2 baja suele tener pacientes que son atendidos en la UCI 1, subiendo un poco esta componente, la UCI 2, con un poco más nos encontramos pacientes de la UCI 3 y, con la componente dos más alta, con los pacientes de la UCI 4.
+
+Ahora vamos a estudiar como afectan estas componentes a las muertes en el hospital. En el siguiente gráfico, pintamos de color verde los muertos y de color rojo los vivos. Además, mantenemos como etiqueta el tipo de UCI.
+
+```{r}
+datos %>% ggplot(aes(x=comp1, y=comp2)) +
+  geom_label(aes(label=uci, color=ihd))
+```
+A pesar de que los datos son bastante homogéneos, podemos apreciar una ligera propensión a que las muertes en el hospital se produzcan en pacientes cuya componente 1 es más baja, no obstante, también mueren pacientes con componente 1 alta. 
+
+La homogeneidad de esta muestra nos hace pensar que es una mala idea hacer clustering, aún así, como hemos visto bastante diferenciación dependiendo de las UCIs, probamos a hacer un algoritmo k-means con 4 clusters (por el número de UCIs).
 
 
+```{r}
+kmeans_result <- datos %>% dplyr::select(comp1,comp2) %>% kmeans(4)
+datos %>% mutate(group = as.factor(kmeans_result$cluster)) %>%
+  ggplot(aes(x=comp1, y=comp2)) +
+  geom_point(aes(color=group))
+  
 
 
+```
+Como habíamos esperado, por como es la muestra, el clustering no es significativo ya que hace la separación, prácticamente, en los ejes de coordenadas.
+
+## Análisis discriminante
+
+```{r}
+
+```
 
 
 
