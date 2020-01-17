@@ -1,11 +1,12 @@
 ---
-title: "Práctica final Análisis de Datos: Ucinet"
+title: 'Práctica final Análisis de Datos: Ucinet'
 author: "Castillo Millán, Sofía; Cirer Pastrana, Víctor Javier; Corporales Tur, Marta"
-time:  "`Sys.Date()`"
-output: 
-  html_document: 
+output:
+  html_document:
     keep_md: yes
     number_sections: yes
+    toc: yes
+  pdf_document:
     toc: yes
 ---
 
@@ -14,55 +15,61 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 # Cargamos librerías
 library("tidyverse")
+library("dplyr")
 ```
 
 # Introducción
 
+Uno de los procesos de predicción más difíciles y delicados, a pesar de toda la tecnología que disponemos en este siglo, sigue siendo la predicción médica. Años de estudios de medicina permiten hoy en día a los facultativos a dar un diagnóstico bastante preciso de lo que tiene un paciente a partir de sus síntomas. A pesar de que puede parecer sencillo, no lo es. Esto se complica exponencialmente en pacientes ingresados en la UCI: la gravedad y el poco tiempo de reacción del que se suele disponer pueden ser cruciales para el devenir del paciente.
+
+Tener un estudio hecho con datos recogidos durante un período de tiempo considerable sobre las caracterísiticas de los paciente ingresados en la UCI y con la suerte que han tenido éstos, puede resultar útil a los médicos para poder hacer un diagnóstico más preciso y poder preparar a los familiares para lo que pueda pasar.
+
+
 # Resumen
+
+A partir de unos datos proporcionados por `Physionet` de pacientes ingresados en la UCI vamos a intentar dar una predicción de mortalidad según los aspectos fisiológicos que se recogen y según el tipo de UCI. Para ello usaremos técnicas de limpieza de datos para poderlos manejar correctamente y técnicas de análisis multivariado para poder sacar información precisa de los datos y que nos ayuden a predecir en un futuro la supervivencia o no del paciente ingresado.
 
 # Limpieza de datos
 
+Nuestro trabajo se inicia con unos datos recogidos en un archivo de texto por cada uno de los pacientes, guardados todos en una misma carpeta, por lo que creamos una lista con todos ellos:
+
 ```{r path}
-path = "data_basic_physionet/set-a/"# path training
+path = "data_basic_physionet/set-a/" #path que nos lleva a la carpeta de los datos
 
-lista_pacientes_set_a = dir(path) # lista  ficheros pacientes 
-
-# length(lista_pacientes_set_a) # número pacientes en training
+lista_pacientes_set_a = dir(path) #creamos una lista con todos los ficheros de los pacientes 
 ```
 
 
 ```{r cargarSetA}
-# Lista path's a cada fichero de paciente
-list_files = paste0(path, lista_pacientes_set_a)
+list_files = paste0(path, lista_pacientes_set_a) #lista de paths de cada fichero
 
-# Función leer paciente
+#función leer paciente
 leer_paciente = function(file){
   read_csv(file, col_types = cols(Time = col_character(),
                                  Parameter = col_character(),
                                  Value = col_double())) %>%
     separate(Time, into = c("H","M"), sep = ":") %>% 
     mutate(Time_Minutes = as.numeric(H)*60 + as.numeric(M)) %>% 
-    select(Time_Minutes, Parameter, Value)
+    dplyr::select(Time_Minutes, Parameter, Value)
 }
 
-# Leer_paciente(list_files[1])
-raw_data = lapply(list_files,leer_paciente) # Lista de los datos por paciente
 
-# Extraer perfiles "RecordID", "Age", "Gender", "Height", "Weight", "ICUType" 
+raw_data = lapply(list_files,leer_paciente) #lista de datos por paciente
+
+#función para obtener perfil paciente: "RecordID", "Age", "Gender", "Height", "Weight", "ICUType" 
 perfil = function(data_paciente){
   data_paciente %>% 
     filter(Parameter %in% c("RecordID", "Age", "Gender", "Height", "ICUType", "Weight")) %>%
-    select(-Time_Minutes) %>% distinct(Parameter, .keep_all = TRUE) %>% 
+    dplyr::select(-Time_Minutes) %>% distinct(Parameter, .keep_all = TRUE) %>% 
     spread(Parameter, Value)
 }
 
-# Guardamos los datos de perfil de cada paciente
+#perfil de cada paciente
 perfiles = lapply(raw_data, perfil)%>%
   bind_rows() %>%
-  select(RecordID, Age, Gender, Height, Weight, ICUType)
+  dplyr::select(RecordID, Age, Gender, Height, Weight, ICUType)
 
-## Leer series
-## Se modifica error de time
+#modifica error time
 serie_UCI_parameter <- function(paciente,parameters){
   paciente %>%
     arrange(Parameter, Time_Minutes) %>%
@@ -71,7 +78,7 @@ serie_UCI_parameter <- function(paciente,parameters){
 } 
 ```
 
-
+Una vez ya tenemos guardados los perfiles de cada uno de los pacientes ingresados, vamos a cargar todos los parámetros de los cuales tenemos datos y con un `lapply` los "apilaremos":
 
 
 ```{r}
@@ -82,7 +89,7 @@ series_parameters = lapply(raw_data, FUN = function(x) serie_UCI_parameter(x,par
 ```
 
 
-En resumen hasta ahora tenemos lo siguiente
+Vamos a echar un vistazo a como tenemos los datos hasta ahora:
 
 ```{r glimpse}
 #set-a
@@ -93,21 +100,25 @@ glimpse(series_parameters)
 
 ## Unificar: series, perfiles y scores
 
-Nos faltan los scores clásicos que se utilizan eb las ICU. Estos ewstán el fichero Outcome-a.txt para el set-a
+una vez ya hemos visto lo que tenemos hasta ahora para hacernos una idea y saber como proceder, tenemos que unificarlo todo: los perfiles que tenemos de cada paciente, los parámetros de los cuales tenemos información y esta información. Estos `scores`están en un fichero llamado `Outcome-a.txt` (correspondiente a los pacientes que hemos cargado)
 
 
 ```{r}
-scoresApath = "data_basic_physionet/Outcomes-a.txt"
-scoresA = read_csv(scoresApath)
+scoresApath = "data_basic_physionet/Outcomes-a.txt" #path del fichero
+
+scoresA = read_csv(scoresApath) #leemos fichero
+
 glimpse(scoresA)
-Scores_perfilesA = inner_join(perfiles, scoresA, "RecordID")
+
+Scores_perfilesA = inner_join(perfiles, scoresA, "RecordID") #unificamos toda la información
+
 glimpse(Scores_perfilesA)
 ```
 
 
 ### Extracción factores de las series 
 
-Genero una tabla con resumenes de  las variables por paciente: media, desviación típica 
+Como hay varias mediciones de las variables de cada uno de los pacientes, vamos a generar una tabla que nos haga un resumen de cada cosa: vamos a hacer por paciente y variable la media y la desviación típica, pues nos pueden ser de utilidad. Para ello tenemos en cuenta `na.rm = T` puesto que así evitaremos que los resultados de las medias o desviaciones típicas sean NA.
 
 ```{r}
 series_summary = series_parameters %>%
@@ -119,6 +130,7 @@ series_summary = series_parameters %>%
   spread(ParameterStat, Value)
 ```
 
+Una vez hecho esto generaremos el `data_tidy` donde estarán nuestros datos ya limpios y con los que podremos trabajar. Hacemos un print de los primeros datos para ver que ya son manejables con los conocimientos que tenemos.
 
 ```{r}
 data_tidy=Scores_perfilesA %>%
@@ -128,11 +140,15 @@ head(data_tidy)
 ```
 
 
-Para elegir las variables hemos dibujado todos los boxplots para saber cuáles eran más significativas teniendo en cuenta la variable `In-hospital_death`. Nos hemos quedado con las más significativas y en caso de duda entre dos hemos cogido la que no estaba en ninguno de los índices SOFA o SAPS. Como ejemplo, mostramos el boxplot del índice `GCS`.
+# Elección de variables.
 
-```{r, echo = FALSE}
+Una vez ya tenemos los datos limpios, vamos a hacer una selección de las 10 variables más significativas para nuestro estudio. Así, con menos variables, será más fácil hacer el estudio.
 
-data_tidy$`In-hospital_death` = factor(data_tidy$`In-hospital_death`, labels = c("0","1"))
+Para elegir las variables, hemos dibujado todos los boxplots para saber cuáles eran más significativas teniendo en cuenta la variable `In-hospital_death`. Nos hemos quedado con las más significativas y en caso de duda entre dos hemos cogido la que no estaba en ninguno de los índices SOFA o SAPS. Como ejemplo, mostramos el boxplot del índice `GCS`.
+
+```{r boxplot, message=FALSE, warning=FALSE}
+
+data_tidy$`In-hospital_death` = factor(data_tidy$`In-hospital_death`, labels = c("0","1")) #pasamos a factor la variable in hospital death para que nos haga el boxplot sin problemas
 
 data_tidy %>%
   filter(!is.na(GCS_mean)) %>% 
@@ -146,19 +162,20 @@ data_tidy %>%
 Nos quedamos con las siguientes 10 variables: 
  
 1. GCS 
-2. WBC  (NO - medias iguales)
-3. RespRate (NO - medias iguales)
+2. WBC
+3. RespRate
 4. Albumin 
-5. BUN (NO - medias iguales)
-6. Cholesterol (NO - medis iguales)
+5. BUN
+6. Cholesterol
 7. PaO2
-8. Glucose (NO - medias iguales)
-9. HCO3 (SAPS)
-10. Lactate (NO - medias iguales)
+8. Glucose
+9. HCO3
+10. Lactate
 
-Una vez tenemos estas vamos a aplicar un `t.test` para saber si es significativa o no. Para ello necesitamos primero hacer un `var.test`, donde descubrimos si las varianzas son iguales o no para poderlo tener en cuenta en el `t.test`. Vamos a mostrar como hemos hecho una de las variables, el índice `GCS` del cual ya hemos visto el boxplot. Recordemos que si `In-hospital_death` es 0 el paciente vive y si es 1, muere en hospital.
+Una vez tenemos éstas vamos a aplicar un `t.test` para saber si es significativa o no. Para ello necesitamos primero hacer un `var.test`, donde descubrimos si las varianzas son iguales o no para poderlo tener en cuenta en el `t.test`. Vamos a mostrar como hemos hecho una de las variables, el índice `GCS` del cual ya hemos visto el boxplot. Recordemos que si `In-hospital_death` es 0 el paciente vive y si es 1, muere en hospital.
 
 Asignamos al valor `x` los valores de la variable a estudiar de los que sobreviven y al `y` los de los que mueren en el hospital, y aplicamos el `var.test` de las dos teniendo en cuenta que nuestra hipótesis nula HO es que las varianzas sean iguales y la hipótesis alternativa H1 es que sean distintas.
+
 ```{r}
 x = data_tidy$GCS_mean[data_tidy$`In-hospital_death` == 0]
 y = data_tidy$GCS_mean[data_tidy$`In-hospital_death` == 1]
@@ -166,6 +183,7 @@ var.test(x,y)
 ```
 
 Una vez aplicaco el test de las varianzas nos fijamos en el valor del `p-valor`. Si este es menor que 0.05, rechazamos la hipótesis nula, por lo que podemos aplicar un `t.test` para varianzas distintas con H0 medias iguales y H1 medias distintas.
+
 ```{r}
 t.test(x, y, var.equal = FALSE, alternative = "greater")
 ```
@@ -175,11 +193,20 @@ Como el `p-valor` es menor que 0.05, rechazamos la hipótesis nula, por lo que o
 De las 10 variables previamente seleccionadas, las que nos hayan salido que tienen media distinta para supervivientes o muertos en la UCI son las que consideraremos para nuestro estudio final.
 
 
-Por tanto, nos quedamos con las siguientes 4: (nos quedamos 4 en vez de 5, pues las otras nos han salido no significativas y así no estropeamos los datos que nos pueden dar más información)
-1. GCS
-2. Albumin
-3. PaO2
-4. HCO3 
+Por tanto, nos quedamos con las siguientes 4 que son, según los tests aplicados, las significativas y damos una pequeña explicación de cada una:
+
+1. GCS - La escala de coma de Glasgow es una escala diseñada para evaluar el estado de alerta en los seres humanos. Evalúa la apertura ocular, la respuesta verbal y la reacción motora. La puntuación va de 3 a 15 siendo:
+* 14-15: Traumatismo craneoencefálico leve
+* 9-13: Traumatismo craneoencefálico moderado
+* <9: Traumatismo craneoencefálico severo
+
+2. Albumin - La albúmina es una proteína producida por el hígado que ayuda a mantener el líquido dentro del torrente sanguíneo sin que se filtre. También es la responsable de transportar varias sustancias por el cuerpo, por ejemplo, vitaminas, enzimas y hormonas. Los niveles de albúmina bajos podrían indicar un problema de hígado o riñones.
+
+3. PaO2 - Es la presión alveolar de oxígenos. La PaO2 mide el grado de oxigenación y se considera que es el mejor parámetro para valorar el transporte de oxígeno.
+
+4. HCO3 - Es el nivel de concentración de bicarbonato en el plasma sanguíneo.
+
+Por tanto, creamos nuestro archivo final con ellas:
 
 
 ```{r}
@@ -187,81 +214,211 @@ data_final <- data_tidy %>%
   select(RecordID, Age, Gender, Weight, ICUType, `SAPS-I`, SOFA, Length_of_stay, Survival, `In-hospital_death`, GCS_mean, Albumin_mean, PaO2_mean, HCO3_mean)
 ```
 
+Una vez ya tenemos nuestros datos finales, podemos proceder al estudio multivariado.
 
 # Análisi Multivariado
 
-Comparación de variables dos a dos
-```{r}
+Para realizar el análisis multivariado comenzaremos realizando un análisis de componentes principales para poder después continuar con un clustering adecuado a las componentes que veamos más representativas. Finalmente, acabaremos con un análisis discriminante para trabajar con variables cualitativas.
+
+## Análisis de componentes principales
+
+Comenzamos con una visualización de los datos, donde se comparan dos a dos cada una de las diferentes variables que hemos escogido para realizar este estudio.
+
+```{r message=FALSE, warning=FALSE}
+library("tidyverse")
+library("FactoMineR")
+library("factoextra")
+library("relaimpo")
+# Para utilizar ggpairs
 library("GGally")
-library("PerformanceAnalytics")
-library("ggcorrplot")
-library("aplpack")
+
+# Para utilizar multiplot
+library("Rmisc")
+
+# Para instalar ggbiplot (NO NECESARIO): instalar y cargar el paquete devtools, y ejecutar el comando
+# install_github("vqv/ggbiplot")
+# library("ggbiplot")
+
+# Para utilizar ggpar
+library("ggpubr")
 
 nums = c(2:9,11:14) # quitamos el 1 que es el numero que indica el paciente y el 10 ('in-hospital_death') porque la hemos hecho no numérica para que fuera factor 0 o 1 para indicar "muerto" o no "muerto" y para las correlaciones da error
-ggpairs(data_final[,nums])
-chart.Correlation(data_final[nums], histogram=TRUE, pch=19)
+ggpairs(data_final[,nums],
+        diag=list(
+          continuous = wrap("barDiag",binwidth = 10, 
+                            color = "black", fill= "blue")
+        ),
+        lower = list(
+          continuous = wrap("points", size = 0.5, color = "black")
+        ),
+        
+        title = "Correlaciones y distribución de las variables")->gg
+
+gg
 
 ```
 
+Como es muy complicado y laborioso tener en cuenta y determinar la relación que hay entre todas estas variables, vamos a describir sus
+componentes principales, de manera que con un número menor de ellas podamos seguir trabajando sobre los datos perdiendo la menor información posible.
 
-Matriz de covarianza
+Comencemos calculando la matriz de covarianza. Teniendo en cuenta que algunas observaciones no tienen todas las variables completas (existen NA), procederemos a eliminar la variable obtenida en esa observación. Así obtenemos:
+
 ```{r}
-cov(data_final[, nums])
+covarianza <- cov(data_final[, nums], use = "na.or.complete")
+covarianza
 ```
 
-Matriz de correlación
+Observamos que la matriz es complicada de entender a simple vista, por ello utilizamos la función PCA, que nos devuelve los valores y vectores propios de esta matriz, dándonos información sobre el número de dimensiones que deberá tener nuestro análisis, es decir, el número de componentes principales.
+
 ```{r}
-cor(data_final[, nums])
+dataPCA <- PCA(data_final[, nums], graph = FALSE)
+eig.val<-get_eigenvalue(dataPCA)
+eig.val
 ```
 
+Que podemos visualizar en el siguiente screeplot:
 
 
-Cálculo de componentes
+Realizamos ahora el 
 ```{r}
-library("factoextra")
-
-data_final.acp = prcomp(!is.na(data_final[, nums]), scale = TRUE) #he probado varias maneras pero no me va, he puesto lo del !is.na() porque si no me dice que hay valores inexistentes y no calcula pero así el error que me da no lo entiendo
+fviz_screeplot(dataPCA, addlabels = TRUE) -> screeplot
+ggpar(screeplot, title = "Porcentaje de la varianza explicado por cada nueva variable",
+xlab = "Dimensión",
+ylab = "Porcentaje de varianza explicado")
 ```
 
-A partir del análisis de componentes principales pintamos los siguientes gráficos para ver mejor la relación de las variables. (NO SE PINTAN PORQUE LO OTRO NO SE HA CALCULADO)
+Observamos que el análisis de componentes principales en este caso es bastante complicado ya que cada variable explica una parte importante de la observación. Aún así, podemos explicar una parte importante utilizando 2 variables en vez de 12 (un 32%). Se podrían haber utilizado más componentes, pero entonces no serviría de nada realizar este análisis ya que aumentaría mucho el contenido a estudiar y no sería significativo.
+
+Veamos que variables representan cada componente:
 
 ```{r}
-fviz_pca_ind(data_final.acp,
-             col.ind = "cos2",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE # Para evitar que el texto se solape
-             )
+fviz_contrib(dataPCA, choice = "var", axes = 1) %>%
+ggpar(title = "Contribución a Dim-1", ylab = "Contribución (%)") -> contrib1
+fviz_contrib(dataPCA, choice = "var", axes = 2) %>%
+ggpar(title = "A Dim-2", ylab = "Contribución (%)") -> contrib2
+multiplot(contrib1, contrib2, cols = 2) 
 ```
 
+Observamos que para cada dimensión tenemos las variables:
+
+1ª Dimensión: SOFA, SAPS y GCS_mean.
+2ª Dimensión: Age y ICUType.
+
+Ahora nos disponemos a analizar las dos componentes para compararlos mediante un biplot.
+
 ```{r}
-fviz_pca_var(data_final.acp,
-             col.var = "contrib",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE
-             )
+as_tibble(dataPCA$ind$coord, rownames = NA) %>% rownames_to_column() %>%
+filter(Dim.1 > 3 | Dim.2 < -2.5) -> addToBiplot12 #Etiquetamos a los outliers
+#Representamos un biplot de las componentes 1 y 2
+fviz_pca_biplot(dataPCA,axes=c(1,2), repel = TRUE,geom = "point",
+addEllipses = TRUE,col.var = 'darkred', invisible = "quanti.sup") %>%
+ggpar(xlim=c(-4,7),ylim=c(-5,4),title = "Biplot - Dim 1 y Dim 2",
+xlab = "Dim 1 (20%)",ylab = "Dim 2 (11%)") +
+geom_text(data = addToBiplot12, mapping = aes(x = Dim.1, y = Dim.2, label = rowname))
 ``` 
 
+Hemos podido ver que debido a la poca cantidad de información que representan las componentes principales, ya que no existen variables dominantes frente a las demás (las variables dan prácticamente la misma información), no hemos podido realizar un ACP satisfactorio.
 
+Observamos que en este caso no podemos llegar a una conclusión ya que los puntos están prácticamente uniformemente distribuidos dentro del biplot. Podemos ver cierta tendencia hacia la derecha del biplot que puede ayudar a entender que la tasa de muerte de una persona está mínimamente representada por la dimensión 1, mientras que la dimensión 2 no dice nada.
 
-Comprobación del ACP: (TAMPOCO SE PINTA POR LO MISMO)
-```{r}
-library("ggfortify")
+De forma acertada han aparecido las variables SOFA y SAPS-I en la primera componente principal ya que, como ya sabemos, suponen un buen coeficiente determinante de la condición del paciente ya que engloba todas las demás variables.
 
-#este como también necesita el data_final.acp que era el que no quería calcular 3 chunks más arriba pues tampoco funciona, pero en principio arreglando ese, tenemos estos tres útlimos arreglados de rebote
-autoplot(data_final.acp,
-         data = data_final,
-         colour = 'ICUType',
-         loadings = TRUE,
-         loadings.colour = 'blue',
-         loadings.label = TRUE,
-         loadings.label.size = 3
-         )
+## Escalamiento multidimensional
+
+Continuaremos con el escalamiento multidimensional. Comenzaremos calculando la matriz de distancias utilizando la distancia de Gower. Esta matriz es muy grande (más de 15 millones de entradas), por tanto omitiremos enseñarla. Después, mediante la función fit, haremos un ACP de dos componentes (igual que el realizado en el apartado anterior), para poder agrupar las variables y analizarlas más fácilmente. 
+
+````{r}
+library("cluster")
+dist=as.matrix(daisy(data_final[, nums], metric="gower"))
+fit <- cmdscale(dist,eig=TRUE, k=2)
 ```
 
+Los metemos en una tibble con etiqueta dependiendo de la UCI.
+
+```{r}
+datos <- tibble(uci = as.factor(data_final[, nums]$ICUType), ihd=data_final[['In-hospital_death']], comp1 = fit$points[,1], comp2 = fit$points[,2])
+
+```
+
+A continuación dibujamos las muestras de pacientes coloreándolas en función del tipo de UCI:
+
+```{r}
+datos %>% ggplot(aes(x=comp1, y=comp2)) +
+  geom_point(aes(color=uci))
+```
+
+Podemos ver que la componente 2 parece influir en el tipo de UCI. Una componente 2 baja suele tener pacientes que son atendidos en la UCI 1, subiendo un poco esta componente, la UCI 2, con un poco más nos encontramos pacientes de la UCI 3 y, con la componente dos más alta, con los pacientes de la UCI 4.
+
+Ahora vamos a estudiar como afectan estas componentes a las muertes en el hospital. En el siguiente gráfico, pintamos de color verde los muertos y de color rojo los vivos. Además, mantenemos como etiqueta el tipo de UCI.
+
+```{r}
+datos %>% ggplot(aes(x=comp1, y=comp2)) +
+  geom_label(aes(label=uci, color=ihd)) #ihd = in hospital death
+```
+A pesar de que los datos son bastante homogéneos, podemos apreciar una ligera propensión a que las muertes en el hospital se produzcan en pacientes cuya componente 1 es más baja, no obstante, también mueren pacientes con componente 1 alta. 
+
+La homogeneidad de esta muestra nos hace pensar que es una mala idea hacer clustering, aún así, como hemos visto bastante diferenciación dependiendo de las UCIs, probamos a hacer un algoritmo k-means con 4 clusters (por el número de UCIs).
+
+
+```{r}
+kmeans_result <- datos %>% dplyr::select(comp1,comp2) %>% kmeans(4)
+datos %>% mutate(group = as.factor(kmeans_result$cluster)) %>%
+  ggplot(aes(x=comp1, y=comp2)) +
+  geom_point(aes(color=group))
+```
+Como habíamos esperado, por como es la muestra, el clustering no es significativo ya que hace la separación, prácticamente, en los ejes de coordenadas.
+
+## Análisis discriminante
+
+Para la realización del análisis discriminante, primero debemos escoger si deseamos utilizar un LDA (Lineal Discriminant Analysis) o un QDA(Quadratic Discriminant Analysis)
+. En este caso, al tener una gran cantidad de datos, optamos por un análisis cuadrático, ya que el análisis lineal no funciona con muestras de gran tamaño. Para continuar, verifiquemos la normalidad de cada una de las observaciones.
+
+Utilizando el test de royston obtenemos:
+
+```{r}
+library("MVN")
+royston_test <- mvn(data = data_final[, nums], mvnTest = "royston")
+royston_test$multivariateNormality
+```
+
+Observamos como demuestra que las observaciones no siguen una distribución normal. Aún así, comprobemos la normalidad de nuevo utilizando el test de Henze-Zirkler:
+
+```{r}
+hz_test <- mvn(data = data_final[, nums], mvnTest = "hz")
+hz_test$multivariateNormality
+
+```
+
+Otra vez observamos que no cumplen la normalidad. Aún así, sabemos que el análisis cuadrático es robusto frente a la no normalidad de las muestras, pero deberemos tenerlo en cuenta a la hora de las conclusiones.
+
+Continuemos con el análisis construyendo el modelo QDA:
+
+```{r}
+library("MASS")
+colnames(data_final)[10]="ihd"
+modelo.qda <- qda(formula = ihd ~ ., data = data_final)
+modelo.qda
+
+```
+Observamos que la diferencia entre personas fallecidas y los supervivientes se ve reflejada sobre todo en los indices SAPS-I y SOFA. También vemos como la edad de los fallecidos es mayor en media y, algunos elementos como los niveles de PaO2 también difieren respecto de los supervivientes.
+
+Miremos ahora las predicciones.
+
+
+```{r, warning=FALSE}
+predicciones <- predict(object = modelo.qda, newdata = data_final)
+table(data_final$ihd, predicciones$class,
+      dnn = c("Clase real", "Clase predicha"))
+```
+Y calculemos su error.
+
+```{r}
+training_error <- mean(data_final$ihd != predicciones$class) * 100
+paste("training_error=", training_error, "%")
+```
+
+Observamos que presenta un error del 14% aproximadamente, esto quiere decir que la predicción es, dentro de lo que cabe, bastante acertada. Como ya habíamos dicho, las observaciones no siguen una distribución normal, por lo que la conclusión no es tan precisa.
 
 
 
-
-
-
-
+# Conclusiones
