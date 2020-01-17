@@ -413,7 +413,7 @@ table(data_final$ihd, predicciones$class,
 Y calculemos su error.
 
 ```{r}
-training_error <- mean(data_final$ihd != predicciones$class) * 100
+training_error <- mean(data_final$ihd != predicciones$class, na.rm = TRUE) * 100
 paste("training_error=", training_error, "%")
 ```
 
